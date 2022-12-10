@@ -1,7 +1,7 @@
-/*       
+/*
  * Copyright (C) 2019, Xilinx Inc - All rights reserved
- * Xilinx Resource Manger U30 Scaler Plugin 
- *                                    
+ * Xilinx Resource Manager U30 Scaler Plugin
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"). You may
  * not use this file except in compliance with the License. A copy of the
  * License is located at
@@ -11,9 +11,9 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations 
+ * License for the specific language governing permissions and limitations
  * under the License.
- */        
+ */
 #include <inttypes.h>
 #include "filter-scaler-xrm-plg-u30.hpp"
 
@@ -23,7 +23,7 @@
  * ------------------------------------------------------------------------------------------------------------------------------------------*/
 static int _populate_scl_data( const char* input, std::vector<ResourceData*> &m_resources, std::vector<ParamsData*> &m_params, char* child_resource)
 {
-    syslog(LOG_NOTICE, "%s(): \n", __func__); 
+    syslog(LOG_NOTICE, "%s(): \n", __func__);
     stringstream job_str;
     pt::ptree job_tree;
 
@@ -38,15 +38,15 @@ static int _populate_scl_data( const char* input, std::vector<ResourceData*> &m_
       auto pr_ptree = job_tree.get_child("request.parameters");
       auto paramVal = new ParamsData;
 
-      if (pr_ptree.not_found() != pr_ptree.find("job-count")) 
-         paramVal->job_count = pr_ptree.get<int32_t>("job-count");           
+      if (pr_ptree.not_found() != pr_ptree.find("job-count"))
+         paramVal->job_count = pr_ptree.get<int32_t>("job-count");
       else
-         paramVal->job_count = -1;      
+         paramVal->job_count = -1;
 
       m_params.push_back(paramVal);
 
       // parse resources
-      if ( pr_ptree.find(child_resource) != pr_ptree.not_found()) 
+      if ( pr_ptree.find(child_resource) != pr_ptree.not_found())
       {
          for (auto it1 : pr_ptree.get_child(child_resource))
          {
@@ -64,7 +64,12 @@ static int _populate_scl_data( const char* input, std::vector<ResourceData*> &m_
              resource->in_res.width = res_ptree.get<int32_t>("resolution.input.width");
              resource->in_res.height = res_ptree.get<int32_t>("resolution.input.height");
              resource->in_res.frame_rate.numerator = res_ptree.get<int32_t>("resolution.input.frame-rate.num");
-             resource->in_res.frame_rate.denominator = res_ptree.get<int32_t>("resolution.input.frame-rate.den");  
+             resource->in_res.frame_rate.denominator = res_ptree.get<int32_t>("resolution.input.frame-rate.den");
+             if(resource->in_res.frame_rate.denominator == 0)
+             {
+               syslog(LOG_WARNING, "Frame rate denominator cannot be 0. Using 1!");
+               resource->in_res.frame_rate.denominator = 1;
+             }
              if (resource->function == "SCALER")
              {
                 for (auto it2 : res_ptree.get_child("resolution.output"))
@@ -80,7 +85,7 @@ static int _populate_scl_data( const char* input, std::vector<ResourceData*> &m_
              }
              m_resources.push_back(resource);
          }
-      } 
+      }
       else if (strcmp(child_resource, "additionalresources_1")==0)
          return 0;
     }
@@ -99,7 +104,7 @@ static int _populate_scl_data( const char* input, std::vector<ResourceData*> &m_
  * XRM API version check
  * ------------------------------------------------------------------------------------------------------------------------------------------*/
 int32_t xrmU30ScalPlugin_api_version(void)
-{ 
+{
   syslog(LOG_NOTICE, "%s(): API version: %d\n", __func__, XRM_API_VERSION_1);
   return (XRM_API_VERSION_1);
 }
@@ -108,17 +113,17 @@ int32_t xrmU30ScalPlugin_api_version(void)
  *
  * XRM Plugin ID check
  * ------------------------------------------------------------------------------------------------------------------------------------------*/
-int32_t xrmU30ScalPlugin_get_plugin_id(void) 
+int32_t xrmU30ScalPlugin_get_plugin_id(void)
 {
   syslog(LOG_NOTICE, "%s(): xrm plugin example id is %d\n", __func__, XRM_PLUGIN_U30_SCAL_ID);
-  return (XRM_PLUGIN_U30_SCAL_ID); 
+  return (XRM_PLUGIN_U30_SCAL_ID);
 }
 
 void _calc_scl_load_res( char* output, std::vector<ResourceData*> &m_resources, std::vector<ParamsData*> &m_params)
 {
    syslog(LOG_NOTICE, "%s(): \n", __func__);
 
-   int calc_percentage[MAX_OUT_ELEMENTS] = {0}, idx=0; 
+   int calc_percentage[MAX_OUT_ELEMENTS] = {0}, idx=0;
    int calc_load = 0, global_calc_load = 0;
    uint64_t in_pixrate = 0;
    uint64_t ladder_pixrate = 0;
@@ -128,7 +133,7 @@ void _calc_scl_load_res( char* output, std::vector<ResourceData*> &m_resources, 
    char temp[1024];
    int global_job_cnt = -1;
 
-   
+
    for (auto res : m_resources)
    {
        if (res->function == "SCALER")
@@ -165,11 +170,11 @@ void _calc_scl_load_res( char* output, std::vector<ResourceData*> &m_resources, 
            syslog(LOG_INFO, "  new_load[%d]              = %d\n", idx, calc_percentage[idx]);
            if (calc_percentage[idx]==0) calc_percentage[idx]=1;
            idx++;
-           parse_aggregate+= (res->channel_load * XRM_MAX_CU_LOAD_GRANULARITY_1000000); 
+           parse_aggregate+= (res->channel_load * XRM_MAX_CU_LOAD_GRANULARITY_1000000);
        }
    }
 
-   for (int p=0; p<(idx) ; p++)   
+   for (int p=0; p<(idx) ; p++)
       calc_aggregate += calc_percentage[p];
 
    syslog(LOG_INFO, "  Aggregate Load Request    = %d\n", calc_aggregate);
@@ -179,34 +184,34 @@ void _calc_scl_load_res( char* output, std::vector<ResourceData*> &m_resources, 
 
    //global  job-count used for launcher to overwrite load
    for (auto gparam : m_params)
-   {     
+   {
       global_job_cnt = gparam->job_count;
       syslog(LOG_INFO, "  global_job_cnt             = %d\n",  global_job_cnt);
    }
 
    if (global_job_cnt > 0)
    {
-      global_calc_load            =  (long double)XRM_MAX_CU_LOAD_GRANULARITY_1000000/global_job_cnt;  
+      global_calc_load            =  (long double)XRM_MAX_CU_LOAD_GRANULARITY_1000000/global_job_cnt;
       syslog(LOG_INFO, "  job_scal_calc_load        = %d\n", global_calc_load);
    }
 
-   //Parsed job-count to be used if it limits channels to less than the calculated. 
+   //Parsed job-count to be used if it limits channels to less than the calculated.
    if ((global_calc_load > calc_aggregate) && (global_calc_load <= XRM_MAX_CU_LOAD_GRANULARITY_1000000))
       sprintf( temp,"%d ",global_calc_load);
    else
    {
       if ((parse_aggregate > calc_aggregate) && (parse_aggregate <= XRM_MAX_CU_LOAD_GRANULARITY_1000000))// Parse channel-load to be depricated by GA-2
-         sprintf(temp,"%d ",parse_aggregate); 
+         sprintf(temp,"%d ",parse_aggregate);
       else
-         sprintf( temp,"%d ",calc_aggregate); 
+         sprintf( temp,"%d ",calc_aggregate);
    }
    strcat(output,temp);
-   sprintf( temp,"%d ",idx); 
+   sprintf( temp,"%d ",idx);
    strcat(output,temp);
 }
 
 /*------------------------------------------------------------------------------------------------------------------------------------------
- * 
+ *
  * XRM U30 scaler plugin for load calculation
  * Expected json format string in ResourceData structure format.
  * ------------------------------------------------------------------------------------------------------------------------------------------*/
@@ -222,23 +227,23 @@ int32_t xrmU30ScalPlugin_CalcPercent(xrmPluginFuncParam* param)
    for (nres=0; nres<2; )
    {
       if (nres==0)
-         outstat = _populate_scl_data( param->input, m_resources, m_params, "resources");   
+         outstat = _populate_scl_data( param->input, m_resources, m_params, "resources");
       else
-         outstat = _populate_scl_data( param->input, m_resources, m_params, "additionalresources_1");   
+         outstat = _populate_scl_data( param->input, m_resources, m_params, "additionalresources_1");
 
       if (outstat == -1)
       {
          syslog(LOG_NOTICE, "%s(): failure in parsing json input\n", __func__);
-         return XRM_ERROR;      
+         return XRM_ERROR;
       }
       else if (outstat ==0) //No additional resources given so don't add any to param output
-         return XRM_SUCCESS;    
-       
+         return XRM_SUCCESS;
+
       _calc_scl_load_res( param->output, m_resources, m_params);
 
       nres++;
    }
- 
+
    return XRM_SUCCESS;
 }
 
